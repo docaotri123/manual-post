@@ -10,6 +10,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 export default function LoginPage() {
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
+  const [tenantCode, setTenantCode] = useState('')
   const [error, setError] = useState('')
   const router = useRouter()
 
@@ -17,11 +18,11 @@ export default function LoginPage() {
     e.preventDefault()
     setError('')
     
-    const success = await login(username, password)
+    const success = await login(username, password, tenantCode)
     if (success) {
       router.push('/dashboard')
     } else {
-      setError('Sai tên đăng nhập hoặc mật khẩu')
+      setError('Sai thông tin đăng nhập')
     }
   }
 
@@ -36,6 +37,16 @@ export default function LoginPage() {
         </CardHeader>
         <CardContent>
           <form onSubmit={handleSubmit} className="space-y-4">
+            <div className="space-y-2">
+              <Input
+                id="tenantCode"
+                type="text"
+                placeholder="Mã Tenant (VD: ABC123)"
+                value={tenantCode}
+                onChange={(e) => setTenantCode(e.target.value.toUpperCase())}
+                className="uppercase"
+              />
+            </div>
             <div className="space-y-2">
               <Input
                 id="username"

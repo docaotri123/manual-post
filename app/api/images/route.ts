@@ -1,10 +1,20 @@
 import { NextResponse } from 'next/server'
 import { db } from '@/lib/firebase'
-import { collection, getDocs, addDoc, deleteDoc, doc, getDoc } from 'firebase/firestore'
+import { collection, getDocs, addDoc, deleteDoc, doc, getDoc, updateDoc, query, where } from 'firebase/firestore'
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
-    const snapshot = await getDocs(collection(db, 'images'))
+    const { searchParams } = new URL(request.url)
+    const tenantCode = searchParams.get('tenantCode')
+    
+    let snapshot
+    if (tenantCode) {
+      const q = query(collection(db, 'images'), where('tenantCode', '==', tenantCode))
+      snapshot = await getDocs(q)
+    } else {
+      snapshot = await getDocs(collection(db, 'images'))
+    }
+    
     const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }))
     return NextResponse.json(data)
   } catch (error) {
@@ -17,10 +27,32 @@ export async function POST(request: Request) {
   try {
     const body = await request.json()
     const { id, ...dataWithoutId } = body
-    const docRef = await addDoc(collection(db, 'images'), dataWithoutId)
+    const docRef = await addDoc(collection(db, 'images'), {
+      ...dataWithoutId,
+      tenantCode: dataWithoutId.tenantCode || ''
+    })
     return NextResponse.json({ id: docRef.id, ...dataWithoutId })
   } catch (error) {
     console.error('Error creating image:', error)
+    return NextResponse.json({ error: String(error) }, { status: 500 })
+  }
+}
+
+export async function PUT(request: Request) {
+  try {
+    const body = await request.json()
+    const { id, ...updateData } = body
+    
+    if (!id) {
+      return NextResponse.json({ error: 'ID is required' }, { status: 400 })
+    }
+    
+    const docRef = doc(db, 'images', id)
+    await updateDoc(docRef, updateData)
+    
+    return NextResponse.json({ success: true, id, ...updateData })
+  } catch (error) {
+    console.error('Error updating image:', error)
     return NextResponse.json({ error: String(error) }, { status: 500 })
   }
 }

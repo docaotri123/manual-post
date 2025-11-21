@@ -3,8 +3,10 @@
 import { useState, useEffect } from 'react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { Share2, Copy, X, Check, Loader2, Shuffle } from 'lucide-react'
+import { Share2, Copy, X, Check, Loader2, Shuffle, RotateCcw } from 'lucide-react'
 import { addWatermark } from '@/lib/watermark'
+import { getUsername } from '@/lib/auth'
+import { useTenant } from '@/lib/tenantContext'
 
 type Content = {
   id: string
@@ -17,7 +19,14 @@ type ImageItem = {
   id: string
   name: string
   url: string
+  thumbnail?: string
   createdBy?: 'ai' | 'human'
+}
+
+type Tenant = {
+  id: string
+  name: string
+  code: string
 }
 
 export default function PostPage() {
@@ -25,16 +34,20 @@ export default function PostPage() {
   const [images, setImages] = useState<ImageItem[]>([])
   const [selectedContent, setSelectedContent] = useState<Content | null>(null)
   const [selectedImages, setSelectedImages] = useState<string[]>([])
+  const { selectedTenantCode } = useTenant()
 
   useEffect(() => {
-    fetch('/api/contents')
+    const contentsUrl = selectedTenantCode ? `/api/contents?tenantCode=${selectedTenantCode}` : '/api/contents'
+    const imagesUrl = selectedTenantCode ? `/api/images?tenantCode=${selectedTenantCode}` : '/api/images'
+    
+    fetch(contentsUrl)
       .then(res => res.json())
       .then(data => setContents(data))
     
-    fetch('/api/images')
+    fetch(imagesUrl)
       .then(res => res.json())
       .then(data => setImages(data))
-  }, [])
+  }, [selectedTenantCode])
 
   const toggleImage = async (id: string) => {
     const isSelected = selectedImages.includes(id)
@@ -65,11 +78,13 @@ export default function PostPage() {
   const [copied, setCopied] = useState(false)
   const [previewWatermarks, setPreviewWatermarks] = useState<Record<string, string>>({})
   const [loading, setLoading] = useState(false)
+  const [selectedPlatform, setSelectedPlatform] = useState<'facebook' | 'zalo' | 'instagram' | 'other'>('facebook')
 
   const handleShare = async () => {
     setLoading(true)
     if (!selectedContent) {
       alert('Vui lòng chọn content')
+      setLoading(false)
       return
     }
 
@@ -79,6 +94,7 @@ export default function PostPage() {
 
     if (selectedImgUrls.length === 0) {
       alert('Vui lòng chọn ít nhất 1 hình')
+      setLoading(false)
       return
     }
 
@@ -167,6 +183,27 @@ export default function PostPage() {
         text: selectedContent!.text,
         files: files
       })
+      
+      // Save to history after successful share
+      try {
+        await fetch('/api/posts-history', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            contentId: selectedContent!.id,
+            contentTitle: selectedContent!.title,
+            contentIcon: selectedContent!.icon,
+            imageIds: selectedImages,
+            imageCount: selectedImages.length,
+            platform: selectedPlatform,
+            postedAt: new Date().toISOString(),
+            postedBy: getUsername(),
+            tenantCode: selectedTenantCode
+          })
+        })
+      } catch (err) {
+        console.error('Failed to save history:', err)
+      }
     } catch (err: any) {
       if (err.name !== 'AbortError') {
         console.error('Share failed:', err)
@@ -179,6 +216,12 @@ export default function PostPage() {
     if (!selectedContent) return
     await navigator.clipboard.writeText(selectedContent.text)
     alert('Đã copy nội dung!')
+  }
+
+  const handleReset = () => {
+    setSelectedContent(null)
+    setSelectedImages([])
+    setPreviewWatermarks({})
   }
 
   const handleRandomSelect = async () => {
@@ -244,6 +287,22 @@ export default function PostPage() {
     setPreviewWatermarks(newWatermarks)
   }
 
+  // Sort contents: selected first
+  const sortedContents = [...contents].sort((a, b) => {
+    if (selectedContent?.id === a.id) return -1
+    if (selectedContent?.id === b.id) return 1
+    return 0
+  })
+
+  // Sort images: selected first
+  const sortedImages = [...images].sort((a, b) => {
+    const aSelected = selectedImages.includes(a.id)
+    const bSelected = selectedImages.includes(b.id)
+    if (aSelected && !bSelected) return -1
+    if (!aSelected && bSelected) return 1
+    return 0
+  })
+
   return (
     <div className="min-h-screen pb-24 lg:pb-0 relative">
       {loading && (
@@ -256,15 +315,25 @@ export default function PostPage() {
       )}
       {/* Header */}
       <div className="p-4 lg:p-6 bg-white border-b sticky top-[57px] lg:top-[61px] z-10 shadow-sm">
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-2xl lg:text-3xl font-bold text-zinc-900">Đăng bài</h1>
-            <p className="text-sm lg:text-base text-zinc-600 mt-1">Chọn content và hình để chia sẻ</p>
+        <div className="flex flex-col gap-3">
+          <div className="flex items-center justify-between">
+            <div>
+              <h1 className="text-2xl lg:text-3xl font-bold text-zinc-900">Đăng bài</h1>
+              <p className="text-sm lg:text-base text-zinc-600 mt-1">Chọn content và hình để chia sẻ</p>
+            </div>
+            <div className="flex gap-2">
+              {(selectedContent || selectedImages.length > 0) && (
+                <Button onClick={handleReset} variant="outline" className="flex-shrink-0">
+                  <RotateCcw className="w-4 h-4 mr-2" />
+                  <span className="hidden sm:inline">Reset</span>
+                </Button>
+              )}
+              <Button onClick={handleRandomSelect} className="bg-gradient-to-r from-orange-500 to-red-500 hover:from-orange-600 hover:to-red-600 flex-shrink-0">
+                <Shuffle className="w-4 h-4 mr-2" />
+                <span className="hidden sm:inline">Random</span>
+              </Button>
+            </div>
           </div>
-          <Button onClick={handleRandomSelect} className="bg-gradient-to-r from-orange-500 to-red-500 hover:from-orange-600 hover:to-red-600 flex-shrink-0">
-            <Shuffle className="w-4 h-4 mr-2" />
-            <span className="hidden sm:inline">Random</span>
-          </Button>
         </div>
       </div>
 
@@ -278,7 +347,7 @@ export default function PostPage() {
             </div>
           </div>
           <div className="p-3 space-y-3 max-h-64 overflow-y-auto">
-            {contents.map((content) => (
+            {sortedContents.map((content) => (
               <div
                 key={content.id}
                 onClick={() => setSelectedContent(content)}
@@ -330,29 +399,35 @@ export default function PostPage() {
               </div>
               {selectedImages.length > 0 && (
                 <div className="flex items-center gap-2">
-                  <span className="bg-purple-600 text-white text-sm px-3 py-1.5 rounded-full font-bold">
+                  <span className="bg-blue-500 text-white text-sm px-3 py-1.5 rounded-full font-bold">
                     {selectedImages.length}
                   </span>
-                  <button onClick={() => setSelectedImages([])} className="text-sm text-red-600 font-semibold">
+                  <Button size="sm" variant="outline" onClick={() => setSelectedImages([])} className="h-8 text-xs border-red-200 text-red-600 hover:bg-red-50 hover:text-red-700">
+                    <X className="w-3 h-3 mr-1" />
                     Bỏ chọn
-                  </button>
+                  </Button>
                 </div>
               )}
             </div>
           </div>
           <div className="p-3">
             <div className="grid grid-cols-3 gap-3">
-              {images.map((image) => (
+              {sortedImages.map((image) => (
                 <div
                   key={image.id}
                   onClick={() => toggleImage(image.id)}
                   className={`relative aspect-square rounded-xl overflow-hidden cursor-pointer transition-all active:scale-95 ${
-                    selectedImages.includes(image.id) ? 'ring-4 ring-purple-600' : 'ring-2 ring-zinc-200'
+                    selectedImages.includes(image.id) ? 'ring-4 ring-blue-500' : 'ring-2 ring-zinc-200'
                   }`}
                 >
                   <img src={previewWatermarks[image.id] || image.url} alt={image.name} className="w-full h-full object-cover" />
+                  <div className={`absolute top-2 left-2 px-2 py-0.5 rounded-full text-xs font-semibold ${
+                    image.createdBy === 'ai' ? 'bg-purple-500 text-white' : 'bg-green-500 text-white'
+                  }`}>
+                    {image.createdBy === 'ai' ? 'AI' : 'Người'}
+                  </div>
                   {selectedImages.includes(image.id) && (
-                    <div className="absolute top-2 right-2 w-8 h-8 bg-purple-600 rounded-full flex items-center justify-center shadow-xl">
+                    <div className="absolute top-2 right-2 w-8 h-8 bg-blue-500 rounded-full flex items-center justify-center shadow-xl">
                       <Check className="w-5 h-5 text-white stroke-[3]" />
                     </div>
                   )}
@@ -379,7 +454,7 @@ export default function PostPage() {
             </div>
           </div>
           <div className="flex-1 overflow-y-auto p-3 space-y-2">
-            {contents.map((content) => (
+            {sortedContents.map((content) => (
               <div
                 key={content.id}
                 onClick={() => setSelectedContent(content)}
@@ -405,29 +480,35 @@ export default function PostPage() {
               </div>
               {selectedImages.length > 0 && (
                 <div className="flex items-center gap-2">
-                  <span className="bg-purple-600 text-white text-xs px-3 py-1 rounded-full font-semibold">
+                  <span className="bg-blue-500 text-white text-xs px-3 py-1 rounded-full font-semibold">
                     Đã chọn: {selectedImages.length}
                   </span>
-                  <button onClick={() => setSelectedImages([])} className="text-xs text-red-600 hover:text-red-700 font-medium">
+                  <Button size="sm" variant="outline" onClick={() => setSelectedImages([])} className="h-7 text-xs border-red-200 text-red-600 hover:bg-red-50 hover:text-red-700">
+                    <X className="w-3 h-3 mr-1" />
                     Bỏ chọn
-                  </button>
+                  </Button>
                 </div>
               )}
             </div>
           </div>
           <div className="flex-1 overflow-y-auto p-4">
             <div className="grid grid-cols-5 gap-3">
-              {images.map((image) => (
+              {sortedImages.map((image) => (
                 <div
                   key={image.id}
                   onClick={() => toggleImage(image.id)}
                   className={`relative aspect-square rounded-lg overflow-hidden cursor-pointer transition-all ${
-                    selectedImages.includes(image.id) ? 'ring-3 ring-purple-600' : 'hover:scale-105 hover:shadow-lg'
+                    selectedImages.includes(image.id) ? 'ring-3 ring-blue-500' : 'hover:scale-105 hover:shadow-lg'
                   }`}
                 >
                   <img src={previewWatermarks[image.id] || image.url} alt={image.name} className="w-full h-full object-cover" />
+                  <div className={`absolute top-1 left-1 px-1.5 py-0.5 rounded-full text-[10px] font-semibold ${
+                    image.createdBy === 'ai' ? 'bg-purple-500 text-white' : 'bg-green-500 text-white'
+                  }`}>
+                    {image.createdBy === 'ai' ? 'AI' : 'Người'}
+                  </div>
                   {selectedImages.includes(image.id) && (
-                    <div className="absolute top-1 right-1 w-6 h-6 bg-purple-600 rounded-full flex items-center justify-center shadow-lg">
+                    <div className="absolute top-1 right-1 w-6 h-6 bg-blue-500 rounded-full flex items-center justify-center shadow-lg">
                       <Check className="w-4 h-4 text-white" />
                     </div>
                   )}
@@ -513,6 +594,56 @@ export default function PostPage() {
                 </Button>
               </div>
 
+              <div className="bg-blue-50 p-3 rounded-lg mb-3">
+                <p className="text-xs font-medium mb-2 text-blue-900">Đăng lên nền tảng nào?</p>
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    onClick={() => setSelectedPlatform('facebook')}
+                    className={`p-2 rounded-lg border-2 transition-all ${
+                      selectedPlatform === 'facebook'
+                        ? 'border-blue-500 bg-blue-100'
+                        : 'border-zinc-200 bg-white hover:border-blue-300'
+                    }`}
+                  >
+                    <span className="text-2xl">📘</span>
+                    <p className="text-xs font-semibold mt-1">Facebook</p>
+                  </button>
+                  <button
+                    onClick={() => setSelectedPlatform('zalo')}
+                    className={`p-2 rounded-lg border-2 transition-all ${
+                      selectedPlatform === 'zalo'
+                        ? 'border-sky-500 bg-sky-100'
+                        : 'border-zinc-200 bg-white hover:border-sky-300'
+                    }`}
+                  >
+                    <span className="text-2xl">💬</span>
+                    <p className="text-xs font-semibold mt-1">Zalo</p>
+                  </button>
+                  <button
+                    onClick={() => setSelectedPlatform('instagram')}
+                    className={`p-2 rounded-lg border-2 transition-all ${
+                      selectedPlatform === 'instagram'
+                        ? 'border-pink-500 bg-pink-100'
+                        : 'border-zinc-200 bg-white hover:border-pink-300'
+                    }`}
+                  >
+                    <span className="text-2xl">📷</span>
+                    <p className="text-xs font-semibold mt-1">Instagram</p>
+                  </button>
+                  <button
+                    onClick={() => setSelectedPlatform('other')}
+                    className={`p-2 rounded-lg border-2 transition-all ${
+                      selectedPlatform === 'other'
+                        ? 'border-gray-500 bg-gray-100'
+                        : 'border-zinc-200 bg-white hover:border-gray-300'
+                    }`}
+                  >
+                    <span className="text-2xl">🌐</span>
+                    <p className="text-xs font-semibold mt-1">Khác</p>
+                  </button>
+                </div>
+              </div>
+
               <div className="grid grid-cols-2 gap-2 sm:gap-3">
                 {watermarkedImages.map((img, idx) => (
                   <div key={idx} className="relative">
@@ -535,9 +666,9 @@ export default function PostPage() {
             </div>
 
             <div className="p-3 sm:p-4 border-t space-y-2 flex-shrink-0">
-              <Button onClick={shareNative} className="w-full h-11 text-sm bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700">
+              <Button onClick={shareNative} className="w-full h-11 text-sm bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700">
                 <Share2 className="w-4 h-4 mr-2" />
-                Share Content + {watermarkedImages.length} Hình qua App
+                Share qua App ({selectedPlatform === 'facebook' ? '📘 Facebook' : selectedPlatform === 'zalo' ? '💬 Zalo' : selectedPlatform === 'instagram' ? '📷 Instagram' : '🌐 Khác'})
               </Button>
               <Button variant="outline" onClick={() => setShowModal(false)} className="w-full h-10 text-sm">
                 Đóng

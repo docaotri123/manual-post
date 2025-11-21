@@ -2,9 +2,19 @@ import { NextResponse } from 'next/server'
 import { db } from '@/lib/firebase'
 import { collection, query, where, getDocs, addDoc, deleteDoc, doc } from 'firebase/firestore'
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
-    const snapshot = await getDocs(collection(db, 'users'))
+    const { searchParams } = new URL(request.url)
+    const tenantCode = searchParams.get('tenantCode')
+    
+    let snapshot
+    if (tenantCode) {
+      const q = query(collection(db, 'users'), where('tenantCode', '==', tenantCode))
+      snapshot = await getDocs(q)
+    } else {
+      snapshot = await getDocs(collection(db, 'users'))
+    }
+    
     const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }))
     return NextResponse.json(data)
   } catch (error) {
@@ -40,7 +50,10 @@ export async function POST(request: Request) {
 export async function PUT(request: Request) {
   try {
     const body = await request.json()
-    const docRef = await addDoc(collection(db, 'users'), body)
+    const docRef = await addDoc(collection(db, 'users'), {
+      ...body,
+      tenantCode: body.tenantCode || ''
+    })
     return NextResponse.json({ id: docRef.id, ...body })
   } catch (error) {
     console.error('Error creating user:', error)

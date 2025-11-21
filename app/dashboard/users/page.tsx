@@ -5,21 +5,29 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { UserPlus, Trash2, Loader2, Shield, Edit2, AlertCircle } from 'lucide-react'
-import { getUsername, getRole } from '@/lib/auth'
+import { getUsername } from '@/lib/auth'
 import { hasPermission, type Role } from '@/lib/permissions'
 import { useRouter } from 'next/navigation'
+import { useTenant } from '@/lib/tenantContext'
 
 type User = {
   id: string
   username: string
   password: string
-  role: 'super_admin' | 'admin' | 'editor' | 'viewer'
+  role: 'master_admin' | 'admin' | 'editor' | 'viewer'
   email: string
   createdAt: string
+  tenantCode?: string
+}
+
+type Tenant = {
+  id: string
+  name: string
+  code: string
 }
 
 const ROLES = [
-  { value: 'super_admin', label: 'Super Admin', color: 'bg-red-100 text-red-700', icon: '👑' },
+  { value: 'master_admin', label: 'Master Admin', color: 'bg-red-100 text-red-700', icon: '👑' },
   { value: 'admin', label: 'Admin', color: 'bg-blue-100 text-blue-700', icon: '🔧' },
   { value: 'editor', label: 'Editor', color: 'bg-green-100 text-green-700', icon: '✏️' },
   { value: 'viewer', label: 'Viewer', color: 'bg-gray-100 text-gray-700', icon: '👁️' }
@@ -33,23 +41,30 @@ export default function UsersPage() {
   const [role, setRole] = useState<User['role']>('viewer')
   const [loading, setLoading] = useState(false)
   const [canManageUsers, setCanManageUsers] = useState(false)
+  const { selectedTenantCode } = useTenant()
   const router = useRouter()
 
   useEffect(() => {
-    const role = getRole() as Role
-    const hasAccess = hasPermission(role, 'users_view')
+    const userRole = localStorage.getItem('role') as Role
+    const hasAccess = hasPermission(userRole, 'users_view')
     setCanManageUsers(hasAccess)
     
     if (!hasAccess) {
       router.push('/dashboard/post')
       return
     }
+  }, [router])
+
+  useEffect(() => {
+    if (!canManageUsers) return
+    
     setLoading(true)
-    fetch('/api/users')
+    const url = selectedTenantCode ? `/api/users?tenantCode=${selectedTenantCode}` : '/api/users'
+    fetch(url)
       .then(res => res.json())
       .then(data => setUsers(Array.isArray(data) ? data : []))
       .finally(() => setLoading(false))
-  }, [router])
+  }, [selectedTenantCode, canManageUsers])
 
   const addUser = async () => {
     if (!username || !password || !email) return
@@ -64,7 +79,8 @@ export default function UsersPage() {
       role,
       createdAt: now,
       createdBy: getUsername(),
-      updatedAt: now
+      updatedAt: now,
+      tenantCode: selectedTenantCode
     } as any
     
     await fetch('/api/users', {
@@ -172,6 +188,7 @@ export default function UsersPage() {
               </select>
             </div>
           </div>
+
           
           <Button onClick={addUser} disabled={loading}>
             {loading ? <Loader2 className="w-4 h-4 mr-2 animate-spin-slow" /> : <UserPlus className="w-4 h-4 mr-2" />}
@@ -212,6 +229,11 @@ export default function UsersPage() {
                   <p className="text-zinc-600">
                     <span className="font-medium">Email:</span> {user.email}
                   </p>
+                  {user.tenantCode && (
+                    <p className="text-zinc-600">
+                      <span className="font-medium">Tenant:</span> {user.tenantCode}
+                    </p>
+                  )}
                   <p className="text-zinc-400 text-xs">
                     Tạo: {new Date(user.createdAt).toLocaleDateString('vi-VN')}
                   </p>

@@ -3,12 +3,12 @@ export const isLoggedIn = (): boolean => {
   return localStorage.getItem('isLoggedIn') === 'true'
 }
 
-export const login = async (username: string, password: string): Promise<boolean> => {
+export const login = async (username: string, password: string, tenantCode?: string): Promise<boolean> => {
   try {
     const response = await fetch('/api/users', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ username, password })
+      body: JSON.stringify({ username, password, tenantCode })
     })
     
     const data = await response.json()
@@ -17,6 +17,7 @@ export const login = async (username: string, password: string): Promise<boolean
       localStorage.setItem('isLoggedIn', 'true')
       localStorage.setItem('username', data.user.username)
       localStorage.setItem('role', data.user.role || 'viewer')
+      localStorage.setItem('tenantCode', tenantCode || '')
       return true
     }
     return false
@@ -30,6 +31,7 @@ export const logout = (): void => {
   localStorage.removeItem('isLoggedIn')
   localStorage.removeItem('username')
   localStorage.removeItem('role')
+  localStorage.removeItem('tenantCode')
 }
 
 export const getUsername = (): string => {
@@ -40,4 +42,9 @@ export const getUsername = (): string => {
 export const getRole = (): string => {
   if (typeof window === 'undefined') return 'viewer'
   return localStorage.getItem('role') || 'viewer'
+}
+
+export const getTenantCode = (): string => {
+  if (typeof window === 'undefined') return ''
+  return localStorage.getItem('tenantCode') || ''
 }

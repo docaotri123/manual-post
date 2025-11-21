@@ -1,10 +1,20 @@
 import { NextResponse } from 'next/server'
 import { db } from '@/lib/firebase'
-import { collection, getDocs, addDoc, deleteDoc, doc, getDoc } from 'firebase/firestore'
+import { collection, getDocs, addDoc, deleteDoc, doc, getDoc, query, where } from 'firebase/firestore'
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
-    const snapshot = await getDocs(collection(db, 'contents'))
+    const { searchParams } = new URL(request.url)
+    const tenantCode = searchParams.get('tenantCode')
+    
+    let snapshot
+    if (tenantCode) {
+      const q = query(collection(db, 'contents'), where('tenantCode', '==', tenantCode))
+      snapshot = await getDocs(q)
+    } else {
+      snapshot = await getDocs(collection(db, 'contents'))
+    }
+    
     const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }))
     return NextResponse.json(data)
   } catch (error) {
@@ -17,7 +27,10 @@ export async function POST(request: Request) {
   try {
     const body = await request.json()
     const { id, ...dataWithoutId } = body
-    const docRef = await addDoc(collection(db, 'contents'), dataWithoutId)
+    const docRef = await addDoc(collection(db, 'contents'), {
+      ...dataWithoutId,
+      tenantCode: dataWithoutId.tenantCode || ''
+    })
     return NextResponse.json({ id: docRef.id, ...dataWithoutId })
   } catch (error) {
     console.error('Error creating content:', error)

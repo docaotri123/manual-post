@@ -3,15 +3,17 @@
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { FileText, Image, Share2, Menu, X, ChevronLeft, ChevronRight, Users } from 'lucide-react'
+import { FileText, Image, Share2, Menu, X, ChevronLeft, ChevronRight, Users, History, Building2 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { getRole } from '@/lib/auth'
 import { canAccessRoute, type Role } from '@/lib/permissions'
 
 const menuItems = [
+  { href: '/dashboard/tenants', label: 'Quản lý Tenants', icon: Building2, color: 'from-cyan-500 to-blue-500' },
   { href: '/dashboard/content', label: 'Quản lý Content', icon: FileText, color: 'from-blue-500 to-indigo-500' },
   { href: '/dashboard/images', label: 'Quản lý Hình', icon: Image, color: 'from-purple-500 to-pink-500' },
   { href: '/dashboard/post', label: 'Đăng bài', icon: Share2, color: 'from-green-500 to-emerald-500' },
+  { href: '/dashboard/history', label: 'Lịch sử', icon: History, color: 'from-amber-500 to-yellow-500' },
   { href: '/dashboard/users', label: 'Quản lý Users', icon: Users, color: 'from-orange-500 to-red-500' },
 ]
 
